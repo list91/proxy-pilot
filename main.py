@@ -75,39 +75,69 @@ def move_commands_to_history(command_ids):
 
 @app.route('/add_command', methods=['POST'])
 def add_command():
-    data = load_commands()
-    command_data = request.json
-    
-    # Более гибкая валидация
-    if not isinstance(command_data, dict):
-        return jsonify({'error': 'Invalid request format'}), 400
-    
-    # Проверка обязательных полей с более мягким подходом
-    if not command_data.get('command'):
-        return jsonify({'error': 'Command is required'}), 400
-    
-    # Params необязателен, но если есть - должен быть словарем
-    params = command_data.get('params', {})
-    if params is not None and not isinstance(params, dict):
-        return jsonify({'error': 'Params must be a dictionary'}), 400
-    
-    command_id = str(uuid.uuid4())
-    
-    new_command = {
-        'id': command_id,
-        'command': command_data['command'],
-        'params': params,
-        'time_created': datetime.now().isoformat()
-    }
-    
-    data['new_commands'].append(new_command)
-    save_commands(data)
-    
-    return jsonify({
-        'status': 'success', 
-        'id': command_id, 
-        'command': new_command['command']
-    })
+    try:
+        # Validate request data
+        if not request.json:
+            return jsonify({
+                'status': 'error',
+                'code': 'INVALID_REQUEST',
+                'message': 'Request body is missing. Please provide command details in JSON format.',
+                'details': 'The request must contain a JSON payload with at least a "command" field.'
+            }), 400
+
+        # Extract command and parameters
+        command = request.json.get('command')
+        params = request.json.get('params', {})
+
+        # Validate command
+        if not command:
+            return jsonify({
+                'status': 'error',
+                'code': 'MISSING_COMMAND',
+                'message': 'Command field is required.',
+                'details': 'You must specify a "command" field in the request body. This should be a string describing the command to be executed.'
+            }), 400
+
+        # Validate params
+        if not isinstance(params, dict):
+            return jsonify({
+                'status': 'error',
+                'code': 'INVALID_PARAMS',
+                'message': 'Command parameters must be a JSON object.',
+                'details': 'The "params" field must be a valid JSON object. Current value is not a valid dictionary.'
+            }), 400
+
+        # Load existing commands
+        data = load_commands()
+
+        # Create new command entry
+        new_command = {
+            'id': str(uuid.uuid4()),
+            'command': command,
+            'params': params,
+            'time_created': datetime.now().isoformat()
+        }
+
+        # Add to new commands list
+        data['new_commands'].append(new_command)
+
+        # Save updated commands
+        save_commands(data)
+
+        return jsonify({
+            'status': 'success', 
+            'message': f'Command "{command}" added successfully',
+            'command': new_command
+        }), 201
+
+    except Exception as e:
+        # Catch any unexpected errors
+        return jsonify({
+            'status': 'error',
+            'code': 'INTERNAL_SERVER_ERROR',
+            'message': 'An unexpected error occurred while processing the command.',
+            'details': str(e)
+        }), 500
 
 @app.route('/read_first', methods=['GET'])
 def read_first():
@@ -152,13 +182,75 @@ def select_last():
 
 @app.route('/move_to_history', methods=['POST'])
 def move_to_history():
-    command_ids = request.json.get('ids', [])
-    
     try:
-        move_commands_to_history(command_ids)
-        return jsonify({'status': 'success'})
+        # Validate request data
+        if not request.json:
+            return jsonify({
+                'status': 'error',
+                'code': 'INVALID_REQUEST',
+                'message': 'Request body is missing. Please provide command ID.',
+                'details': 'The request must contain a JSON payload with an "id" field.'
+            }), 400
+
+        # Extract command ID
+        command_id = request.json.get('id')
+        
+        # Validate command ID
+        if not command_id:
+            return jsonify({
+                'status': 'error',
+                'code': 'MISSING_COMMAND_ID',
+                'message': 'Command ID is required to move a command to history.',
+                'details': 'You must provide a valid "id" field corresponding to an existing new command.'
+            }), 400
+
+        # Load existing commands
+        data = load_commands()
+
+        # Find command to move
+        command_to_move = None
+        remaining_new_commands = []
+        for cmd in data['new_commands']:
+            if cmd['id'] == command_id:
+                command_to_move = cmd
+                # Add time started when moving to history
+                command_to_move['time_started'] = datetime.now().isoformat()
+            else:
+                remaining_new_commands.append(cmd)
+        
+        # Check if command was found
+        if not command_to_move:
+            return jsonify({
+                'status': 'error',
+                'code': 'COMMAND_NOT_FOUND',
+                'message': f'Command with ID {command_id} not found in new commands.',
+                'details': 'Ensure the command ID is correct and the command exists in the new commands list.',
+                'available_commands': [cmd['id'] for cmd in data['new_commands']]
+            }), 404
+
+        # Update commands data
+        data['new_commands'] = remaining_new_commands
+        data['history'].insert(0, command_to_move)
+        data['history'] = data['history'][:MAX_HISTORY_SIZE]
+
+        # Save updated commands
+        save_commands(data)
+
+        return jsonify({
+            'status': 'success', 
+            'message': f'Command {command_id} successfully moved to history',
+            'command': command_to_move,
+            'history_size': len(data['history'])
+        }), 200
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        # Catch any unexpected errors
+        return jsonify({
+            'status': 'error',
+            'code': 'INTERNAL_SERVER_ERROR',
+            'message': 'An unexpected error occurred while moving command to history.',
+            'details': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
