@@ -77,25 +77,68 @@ def move_commands_to_history(command_ids):
 def add_command():
     data = load_commands()
     command_data = request.json
+    
+    # Более гибкая валидация
+    if not isinstance(command_data, dict):
+        return jsonify({'error': 'Invalid request format'}), 400
+    
+    # Проверка обязательных полей с более мягким подходом
+    if not command_data.get('command'):
+        return jsonify({'error': 'Command is required'}), 400
+    
+    # Params необязателен, но если есть - должен быть словарем
+    params = command_data.get('params', {})
+    if params is not None and not isinstance(params, dict):
+        return jsonify({'error': 'Params must be a dictionary'}), 400
+    
     command_id = str(uuid.uuid4())
-    command = {
+    
+    new_command = {
         'id': command_id,
-        'command': command_data.get('command', ''),
+        'command': command_data['command'],
+        'params': params,
         'time_created': datetime.now().isoformat()
     }
-    data['new_commands'].append(command)
+    
+    data['new_commands'].append(new_command)
     save_commands(data)
-    return jsonify({'status': 'success', 'id': command_id})
+    
+    return jsonify({
+        'status': 'success', 
+        'id': command_id, 
+        'command': new_command['command']
+    })
 
 @app.route('/read_first', methods=['GET'])
 def read_first():
-    count = request.args.get('count', '1')
+    data = load_commands()
     
+    # Параметры запроса
+    count = request.args.get('count', '1')
+    source = request.args.get('source', 'new_commands')
+    command_type = request.args.get('type')
+    
+    # Выбор источника команд
+    if source not in ['new_commands', 'history']:
+        return jsonify({'error': 'Invalid source. Use "new_commands" or "history"'}), 400
+    
+    commands = data.get(source, [])
+    
+    # Фильтрация по типу команды
+    if command_type:
+        commands = [cmd for cmd in commands if cmd.get('command') == command_type]
+    
+    # Обработка количества команд
     try:
-        commands = read_first_commands(count)
-        return jsonify(commands)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
+        if count.lower() == 'all':
+            result = commands
+        else:
+            count = int(count)
+            result = commands[:count]
+    except ValueError:
+        return jsonify({'error': 'Count must be a number or "all"'}), 400
+    
+    return jsonify(result)
 
 @app.route('/select_last', methods=['GET'])
 def select_last():
