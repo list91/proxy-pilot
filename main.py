@@ -8,7 +8,7 @@ import sys
 app = Flask(__name__)
 
 # Constants
-MAX_HISTORY_SIZE = 3
+MAX_HISTORY_SIZE = 9
 DATA_FILE = 'commands_data.json'
 
 def load_commands():
