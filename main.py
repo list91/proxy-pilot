@@ -160,5 +160,15 @@ def move_to_history():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
+@app.route('/get_command', methods=['GET'])
+def get_command():
+    data = load_commands()
+    if data['new_commands']:
+        # Получаем и удаляем первую команду
+        command = data['new_commands'].pop(0)
+        save_commands(data)
+        return jsonify(command), 200
+    return jsonify({}), 204
+
 if __name__ == '__main__':
     app.run(debug=True)
