@@ -78,25 +78,28 @@ def add_command():
     data = load_commands()
     command_data = request.json
     
-    # Более гибкая валидация
+    # Валидация формата запроса
     if not isinstance(command_data, dict):
-        return jsonify({'error': 'Invalid request format'}), 400
+        return jsonify({'error': 'Некорректный формат запроса'}), 400
     
-    # Проверка обязательных полей с более мягким подходом
-    if not command_data.get('command'):
-        return jsonify({'error': 'Command is required'}), 400
+    # Проверка обязательных полей
+    scenario = command_data.get('scenario')
+    actions = command_data.get('actions')
+    if not scenario or not isinstance(actions, list):
+        return jsonify({'error': 'Сценарий и действия обязательны'}), 400
     
-    # Params необязателен, но если есть - должен быть словарем
-    params = command_data.get('params', {})
-    if params is not None and not isinstance(params, dict):
-        return jsonify({'error': 'Params must be a dictionary'}), 400
+    # Обработка действий
+    for action in actions:
+        action_name = action.get('name')
+        action_func = action.get('func')
+        # Реализуйте логику обработки действий здесь
     
     command_id = str(uuid.uuid4())
     
     new_command = {
         'id': command_id,
-        'command': command_data['command'],
-        'params': params,
+        'scenario': scenario,
+        'actions': actions,
         'time_created': datetime.now().isoformat()
     }
     
@@ -106,7 +109,7 @@ def add_command():
     return jsonify({
         'status': 'success', 
         'id': command_id, 
-        'command': new_command['command']
+        'scenario': new_command['scenario']
     })
 
 @app.route('/read_first', methods=['GET'])
