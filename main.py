@@ -173,5 +173,13 @@ def get_command():
         return jsonify(command), 200
     return jsonify({}), 204
 
+@app.route('/get_latest_commands', methods=['GET'])
+def get_latest_commands():
+    try:
+        commands = select_last_commands(count='all')  # Получаем все команды
+        return jsonify({'new_commands': commands}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
